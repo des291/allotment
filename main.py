@@ -1,10 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import os
 from pydantic import BaseModel
 from datetime import datetime, date
 from uuid import UUID
+from typing import List
 
 load_dotenv()
 required_vars = ["ENVIRONMENT", "SUPABASE_URL", "SUPABASE_KEY"]
@@ -33,8 +34,8 @@ def read_root():
 
 
 class Plot(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     profile_id: UUID
     name: str
     location: str
@@ -42,8 +43,8 @@ class Plot(BaseModel):
 
 
 class Bed(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     name: str
     size: float
     description: str
@@ -51,8 +52,8 @@ class Bed(BaseModel):
 
 
 class Crop(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     name: str
     description: str
     planting_season: str
@@ -60,8 +61,8 @@ class Crop(BaseModel):
 
 
 class Planting(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     bed_id: int
     crop_id: int
     sow_date: date
@@ -73,14 +74,14 @@ class Planting(BaseModel):
 
 
 class Profile(BaseModel):
-    id: UUID
-    created_at: datetime
+    id: UUID | None = None
+    created_at: datetime | None = None
     name: str
 
 
 class RecurringTask(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     crop_id: int
     bed_id: int
     description: str
@@ -93,8 +94,8 @@ class RecurringTask(BaseModel):
 
 
 class ScheduledTask(BaseModel):
-    id: int
-    created_at: datetime
+    id: int | None = None
+    created_at: datetime | None = None
     crop_id: int
     bed_id: int
     description: str
@@ -108,3 +109,47 @@ class ScheduledTask(BaseModel):
     planting_id: int
     profile_id: int
     recurring_task_id: int
+
+
+# --- Helper: Error Handling ---
+async def execute_supabase_query(query):
+    try:
+        response = await query.execute()
+        if response.data is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="No data found"
+            )
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Supabase error: {str(e)}",
+        )
+
+
+@app.post("/profiles/", response_model=Profile, status_code=status.HTTP_201_CREATED)
+async def create_profile(profile: Profile):
+    data = await execute_supabase_query(
+        supabase.table("profiles").insert(profile.model_dump()).execute()
+    )
+    return data.data[0]
+
+
+@app.get("/profiles/", response_model=List[Profile])
+async def get_profiles():
+    data = await execute_supabase_query(supabase.table("profiles").select("*"))
+    return data.data
+
+
+@app.post("/plots/", response_model=Plot, status_code=status.HTTP_201_CREATED)
+async def create_plot(plot: Plot):
+    data = await execute_supabase_query(
+        supabase.table("plots").insert(plot.model_dump()).execute()
+    )
+    return data.data[0]
+
+
+@app.get("/plots/", response_model=List[Plot])
+async def list_plots():
+    data = await execute_supabase_query(supabase.table("plots").select("*"))
+    return data.data
